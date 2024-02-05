@@ -25,7 +25,7 @@ module cdeps_dlnd_comp
   use shr_kind_mod      , only : r8=>shr_kind_r8, i8=>shr_kind_i8, cl=>shr_kind_cl, cs=>shr_kind_cs
   use shr_sys_mod       , only : shr_sys_abort
   use shr_cal_mod       , only : shr_cal_ymd2date
-  use shr_log_mod     , only : shr_log_setLogUnit
+  use shr_log_mod       , only : shr_log_setLogUnit
   use dshr_methods_mod  , only : dshr_state_getfldptr, dshr_state_diagnose, chkerr, memcheck
   use dshr_strdata_mod  , only : shr_strdata_type, shr_strdata_advance, shr_strdata_get_stream_domain
   use dshr_strdata_mod  , only : shr_strdata_init_from_config
@@ -157,6 +157,7 @@ contains
 
   !===============================================================================
   subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
+    use shr_nl_mod, only:  shr_nl_find_group_name
 
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
@@ -198,6 +199,8 @@ contains
     if (my_task == main_task) then
        nlfilename = "dlnd_in"//trim(inst_suffix)
        open (newunit=nu, file=trim(nlfilename), status="old", action="read")
+       call shr_nl_find_group_name(nu, 'dlnd_nml', status=ierr)
+
        read (nu,nml=dlnd_nml,iostat=ierr)
        close(nu)
        if (ierr > 0) then
@@ -210,6 +213,7 @@ contains
        if(skip_restart_read) bcasttmp(3) = 1
        if(export_all) bcasttmp(4) = 1
     end if
+
     call ESMF_GridCompGet(gcomp, vm=vm, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 

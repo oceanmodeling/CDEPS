@@ -76,7 +76,7 @@ module cdeps_dwav_comp
   character(CL)                :: restfilm = nullstr                  ! model restart file namelist
   integer                      :: nx_global
   integer                      :: ny_global
-  logical                      :: skip_restart_read = .false.         ! true => skip restart read 
+  logical                      :: skip_restart_read = .false.         ! true => skip restart read
   logical                      :: export_all = .false.                ! true => export all fields, do not check connected or not
 
   ! constants
@@ -151,6 +151,7 @@ contains
 
   !===============================================================================
   subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
+    use shr_nl_mod, only:  shr_nl_find_group_name
 
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
@@ -192,6 +193,7 @@ contains
     if (my_task == main_task) then
        nlfilename = "dwav_in"//trim(inst_suffix)
        open (newunit=nu,file=trim(nlfilename),status="old",action="read")
+       call shr_nl_find_group_name(nu, 'dwav_nml', status=ierr)
        read (nu,nml=dwav_nml,iostat=ierr)
        close(nu)
        if (ierr > 0) then
@@ -200,15 +202,14 @@ contains
        end if
 
        ! write namelist input to standard out
-       write(logunit,F00)' datamode          = ',trim(datamode)
-       write(logunit,F00)' model_meshfile    = ',trim(model_meshfile)
-       write(logunit,F00)' model_maskfile    = ',trim(model_maskfile)
-       write(logunit,F01)' nx_global         = ',nx_global
-       write(logunit,F01)' ny_global         = ',ny_global
-       write(logunit,F00)' restfilm          = ',trim(restfilm)
+       write(logunit,F00)' datamode       = ',trim(datamode)
+       write(logunit,F00)' model_meshfile = ',trim(model_meshfile)
+       write(logunit,F00)' model_maskfile = ',trim(model_maskfile)
+       write(logunit,F01)' nx_global      = ',nx_global
+       write(logunit,F01)' ny_global      = ',ny_global
+       write(logunit,F00)' restfilm       = ',trim(restfilm)
        write(logunit,F02)' skip_restart_read = ',skip_restart_read
-       write(logunit,F02)' export_all        = ',export_all
-
+       write(logunit,F02)' export_all = ', export_all
        bcasttmp = 0
        bcasttmp(1) = nx_global
        bcasttmp(2) = ny_global
@@ -230,6 +231,7 @@ contains
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call ESMF_VMBroadcast(vm, bcasttmp, 4, main_task, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
     nx_global = bcasttmp(1)
     ny_global = bcasttmp(2)
     skip_restart_read = (bcasttmp(3) == 1)

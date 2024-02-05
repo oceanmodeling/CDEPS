@@ -26,11 +26,17 @@ module datm_datamode_era5_mod
   real(r8), pointer :: Sa_z(:)              => null()
   real(r8), pointer :: Sa_u10m(:)           => null()
   real(r8), pointer :: Sa_v10m(:)           => null()
+  real(r8), pointer :: Sa_u(:)              => null()
+  real(r8), pointer :: Sa_v(:)              => null()
   real(r8), pointer :: Sa_wspd10m(:)        => null()
+  real(r8), pointer :: Sa_wspd(:)           => null()
   real(r8), pointer :: Sa_t2m(:)            => null()
+  real(r8), pointer :: Sa_tbot(:)           => null()
   real(r8), pointer :: Sa_tskn(:)           => null()
   real(r8), pointer :: Sa_q2m(:)            => null()
+  real(r8), pointer :: Sa_shum(:)           => null()
   real(r8), pointer :: Sa_pslv(:)           => null()
+  real(r8), pointer :: Sa_pbot(:)           => null()
   real(r8), pointer :: Faxa_rain(:)         => null()
   real(r8), pointer :: Faxa_rainc(:)        => null()
   real(r8), pointer :: Faxa_rainl(:)        => null()
@@ -52,10 +58,19 @@ module datm_datamode_era5_mod
 !  real(r8), pointer :: Faxa_ndep(:,:)       => null()
 
   ! stream data
+  real(r8), pointer :: strm_z(:)            => null()
   real(r8), pointer :: strm_tdew(:)         => null()
+  real(r8), pointer :: strm_wind(:)         => null()
+  real(r8), pointer :: strm_wind10m(:)      => null()
+  real(r8), pointer :: strm_u(:)            => null()
+  real(r8), pointer :: strm_v(:)            => null()
+  real(r8), pointer :: strm_u10m(:)         => null()
+  real(r8), pointer :: strm_v10m(:)         => null()
 
-  real(r8) :: t2max  ! units detector
-  real(r8) :: td2max ! units detector
+  real(r8) :: t2max   ! units detector
+  real(r8) :: td2max  ! units detector
+  real(r8) :: lwmax ! units detector
+  real(r8) :: precmax ! units detector
 
   real(r8) , parameter :: tKFrz    = SHR_CONST_TKFRZ
   real(r8) , parameter :: rdair    = SHR_CONST_RDAIR ! dry air gas constant ~ J/K/kg
@@ -89,11 +104,17 @@ contains
     call dshr_fldList_add(fldsExport, 'Sa_z'       )
     call dshr_fldList_add(fldsExport, 'Sa_u10m'    )
     call dshr_fldList_add(fldsExport, 'Sa_v10m'    )
+    call dshr_fldList_add(fldsExport, 'Sa_u'       )
+    call dshr_fldList_add(fldsExport, 'Sa_v'       )
     call dshr_fldList_add(fldsExport, 'Sa_wspd10m' )
+    call dshr_fldList_add(fldsExport, 'Sa_wspd'    )
     call dshr_fldList_add(fldsExport, 'Sa_t2m'     )
+    call dshr_fldList_add(fldsExport, 'Sa_tbot'    )
     call dshr_fldList_add(fldsExport, 'Sa_tskn'    )
     call dshr_fldList_add(fldsExport, 'Sa_q2m'     )
+    call dshr_fldList_add(fldsExport, 'Sa_shum'    )
     call dshr_fldList_add(fldsExport, 'Sa_pslv'    )
+    call dshr_fldList_add(fldsExport, 'Sa_pbot'    )
     call dshr_fldList_add(fldsExport, 'Faxa_rain'  )
     call dshr_fldList_add(fldsExport, 'Faxa_rainc' )
     call dshr_fldList_add(fldsExport, 'Faxa_rainl' )
@@ -137,7 +158,21 @@ contains
     rc = ESMF_SUCCESS
 
     ! initialize pointers for module level stream arrays
-    call shr_strdata_get_stream_pointer( sdat, 'Sa_tdew'   , strm_tdew , rc)
+    call shr_strdata_get_stream_pointer(sdat, 'Sa_z'      , strm_z   , rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_strdata_get_stream_pointer(sdat, 'Sa_tdew'   , strm_tdew, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_strdata_get_stream_pointer(sdat, 'Sa_wspd'   , strm_wind, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_strdata_get_stream_pointer(sdat, 'Sa_wspd10m', strm_wind10m, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_strdata_get_stream_pointer(sdat, 'Sa_u'      , strm_u, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_strdata_get_stream_pointer(sdat, 'Sa_v'      , strm_v, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_strdata_get_stream_pointer(sdat, 'Sa_u10m'   , strm_u10m, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_strdata_get_stream_pointer(sdat, 'Sa_v10m'   , strm_v10m, rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     ! get export state pointers
@@ -147,15 +182,27 @@ contains
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Sa_v10m'    , fldptr1=Sa_v10m    , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Sa_u'       , fldptr1=Sa_u       , allowNullReturn=.true., rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Sa_v'       , fldptr1=Sa_v       , allowNullReturn=.true., rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Sa_wspd10m' , fldptr1=Sa_wspd10m , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Sa_wspd'    , fldptr1=Sa_wspd    , allowNullReturn=.true., rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Sa_t2m'     , fldptr1=Sa_t2m     , allowNullReturn=.true., rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Sa_tbot'    , fldptr1=Sa_tbot    , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Sa_tskn'    , fldptr1=Sa_tskn    , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Sa_q2m'     , fldptr1=Sa_q2m     , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Sa_shum'    , fldptr1=Sa_shum    , allowNullReturn=.true., rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Sa_pslv'    , fldptr1=Sa_pslv    , allowNullReturn=.true., rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Sa_pbot'    , fldptr1=Sa_pbot    , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Faxa_rain'  , fldptr1=Faxa_rain  , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -211,9 +258,9 @@ contains
     ! local variables
     logical  :: first_time = .true.
     integer  :: n                   ! indices
-    integer  :: lsize               ! size of attr vect
+    integer  :: lsize = 0           ! size of attr vect
     real(r8) :: rtmp(2)
-    real(r8) :: t2, pslv
+    real(r8) :: tbot, pbot
     real(r8) :: e, qsat
     type(ESMF_VM) :: vm
     character(len=*), parameter :: subname='(datm_datamode_era5_advance): '
@@ -221,24 +268,66 @@ contains
 
     rc = ESMF_SUCCESS
 
-    lsize = size(strm_tdew)
+    ! one of the following needs to be in the stream
+    if (associated(Sa_z)) lsize = size(Sa_z)
+    if (associated(strm_tdew)) lsize = size(strm_tdew)
+    if (mainproc .and. lsize == 0) then
+       write(logunit,*) trim(subname),' Sa_z or Sa_tdew need to be in the stream! Exiting ...'
+    end if
+
     if (first_time) then
        call ESMF_VMGetCurrent(vm, rc=rc)
        ! determine t2max (see below for use)
        if (associated(Sa_t2m)) then
-         rtmp(1) = maxval(Sa_t2m(:))
-
-         call ESMF_VMAllReduce(vm, rtmp, rtmp(2:), 1, ESMF_REDUCE_MAX, rc=rc)
-         t2max = rtmp(2)
-         if (mainproc) write(logunit,*) trim(subname),' t2max = ',t2max
+          rtmp(1) = maxval(Sa_t2m(:))
+          call ESMF_VMAllReduce(vm, rtmp, rtmp(2:), 1, ESMF_REDUCE_MAX, rc=rc)
+          t2max = rtmp(2)
+          if (mainproc) write(logunit,*) trim(subname),' t2max = ',t2max
        end if
 
        ! determine tdewmax (see below for use)
-       rtmp(1) = maxval(strm_tdew(:))
-       call ESMF_VMAllReduce(vm, rtmp, rtmp(2:), 1, ESMF_REDUCE_MAX, rc=rc)
-       td2max = rtmp(2)
+       if (associated(strm_tdew)) then
+          rtmp(1) = maxval(strm_tdew(:))
+          call ESMF_VMAllReduce(vm, rtmp, rtmp(2:), 1, ESMF_REDUCE_MAX, rc=rc)
+          td2max = rtmp(2)
+          if (mainproc) write(logunit,*) trim(subname),' td2max = ',td2max
+       end if
 
-       if (mainproc) write(logunit,*) trim(subname),' td2max = ',td2max
+       ! determine lwmax / lwmax
+       if (associated(Faxa_lwdn)) then
+          rtmp(1) = maxval(Faxa_lwdn(:))
+          call ESMF_VMAllReduce(vm, rtmp, rtmp(2:), 1, ESMF_REDUCE_MAX, rc=rc)
+          lwmax = rtmp(2)
+          if (mainproc) write(logunit,*) trim(subname),' lwmax = ',lwmax
+       else
+          ! try with other variable since Faxa_lwdn is not available
+          if (associated(Faxa_lwnet)) then
+            rtmp(1) = maxval(Faxa_lwnet(:))
+            call ESMF_VMAllReduce(vm, rtmp, rtmp(2:), 1, ESMF_REDUCE_MAX, rc=rc)
+            lwmax = rtmp(2)
+            if (mainproc) write(logunit,*) trim(subname),' lwmax = ',lwmax
+          else
+            lwmax = 0.0_r8
+          end if
+       end if
+
+       ! determine precmax
+       if (associated(Faxa_rain)) then
+          rtmp(1) = maxval(Faxa_rain(:))
+          call ESMF_VMAllReduce(vm, rtmp, rtmp(2:), 1, ESMF_REDUCE_MAX, rc=rc)
+          precmax = rtmp(2)
+          if (mainproc) write(logunit,*) trim(subname),' precmax = ', precmax
+       else
+          ! try with other variable since Faxa_rain is not available
+          if (associated(Faxa_rainl)) then
+            rtmp(1) = maxval(Faxa_rainl(:))
+            call ESMF_VMAllReduce(vm, rtmp, rtmp(2:), 1, ESMF_REDUCE_MAX, rc=rc)
+            precmax = rtmp(2)
+            if (mainproc) write(logunit,*) trim(subname),' precmax = ', precmax
+          else
+            precmax = 0.0_r8
+          end if
+       end if
 
        ! reset first_time
        first_time = .false.
@@ -246,23 +335,47 @@ contains
 
     do n = 1, lsize
        !--- bottom layer height ---
-       if (associated(Sa_z)) then
-         Sa_z(n) = 10.0_r8
+       if (.not. associated(strm_z) .and. associated(Sa_z)) then
+          Sa_z(n) = 10.0_r8
        end if
 
-       !--- calculate wind speed ---
-       if (associated(Sa_wspd10m)) then
-         Sa_wspd10m(n) = sqrt(Sa_u10m(n)*Sa_u10m(n)+Sa_v10m(n)*Sa_v10m(n))
+       !--- calculate wind components if wind speed is provided ---
+       if (associated(strm_wind)) then
+          Sa_u(n) = strm_wind(n)/sqrt(2.0_r8)
+          Sa_v(n) = Sa_u(n)
+       end if
+       if (associated(strm_wind10m)) then
+          Sa_u10m(n) = strm_wind10m(n)/sqrt(2.0_r8)
+          Sa_v10m(n) = Sa_u10m(n)
        end if
 
-       !--- specific humidity at 2m ---
-       if (associated(Sa_t2m) .and. associated(Sa_pslv) .and. associated(Sa_q2m)) then
-         t2 = Sa_t2m(n)
-         pslv = Sa_pslv(n)
-         if (td2max < 50.0_r8) strm_tdew(n) = strm_tdew(n) + tkFrz
-         e = datm_eSat(strm_tdew(n), t2)
-         qsat = (0.622_r8 * e)/(pslv - 0.378_r8 * e)
-         Sa_q2m(n) = qsat
+       !--- calculate wind speed if wind components are provided ---
+       if (associated(strm_u10m) .and. associated(strm_v10m) .and. associated(Sa_wspd10m)) then
+          Sa_wspd10m(n) = sqrt(Sa_u10m(n)*Sa_u10m(n)+Sa_v10m(n)*Sa_v10m(n))
+       end if
+       if (associated(strm_u) .and. associated(strm_v) .and. associated(Sa_wspd)) then
+          Sa_wspd(n) = sqrt(Sa_u(n)*Sa_u(n)+Sa_v(n)*Sa_v(n))
+       end if
+
+       !--- calculate specific humidity from dew point temperature ---
+       if (associated(strm_tdew)) then
+          if (associated(Sa_t2m)) then
+             tbot = Sa_t2m(n)
+          else if (associated(Sa_tbot)) then
+             tbot = Sa_tbot(n)
+          end if
+
+          if (associated(Sa_pslv)) then
+             pbot = Sa_pslv(n)
+          else if (associated(Sa_pbot)) then
+             pbot = Sa_pbot(n)
+          end if
+
+          if (td2max < 50.0_r8) strm_tdew(n) = strm_tdew(n) + tkFrz
+          e = datm_eSat(strm_tdew(n), tbot)
+          qsat = (0.622_r8 * e)/(pbot - 0.378_r8 * e)
+          if (associated(Sa_q2m)) Sa_q2m(n) = qsat
+          if (associated(Sa_shum)) Sa_shum(n) = qsat
        end if
     end do
 
@@ -293,23 +406,31 @@ contains
     !----------------------------------------------------------
 
     ! convert J/m^2 to W/m^2
-    if (associated(Faxa_lwdn))  Faxa_lwdn(:)  = Faxa_lwdn(:)/3600.0_r8
-    if (associated(Faxa_lwnet)) Faxa_lwnet(:) = Faxa_lwnet(:)/3600.0_r8
-    if (associated(Faxa_swvdr)) Faxa_swvdr(:) = Faxa_swvdr(:)/3600.0_r8
-    if (associated(Faxa_swndr)) Faxa_swndr(:) = Faxa_swndr(:)/3600.0_r8
-    if (associated(Faxa_swvdf)) Faxa_swvdf(:) = Faxa_swvdf(:)/3600.0_r8
-    if (associated(Faxa_swndf)) Faxa_swndf(:) = Faxa_swndf(:)/3600.0_r8
-    if (associated(Faxa_swdn))  Faxa_swdn(:)  = Faxa_swdn(:)/3600.0_r8
-    if (associated(Faxa_swnet)) Faxa_swnet(:) = Faxa_swnet(:)/3600.0_r8
-    if (associated(Faxa_sen))   Faxa_sen(:)   = Faxa_sen(:)/3600.0_r8
-    if (associated(Faxa_lat))   Faxa_lat(:)   = Faxa_lat(:)/3600.0_r8
+    if (lwmax < 1.0e4_r8) then
+       if (mainproc) write(logunit,*) trim(subname),' flux related variables are already in W/m^2 unit!'
+    else
+       if (associated(Faxa_lwdn))  Faxa_lwdn(:)  = Faxa_lwdn(:)/3600.0_r8
+       if (associated(Faxa_lwnet)) Faxa_lwnet(:) = Faxa_lwnet(:)/3600.0_r8
+       if (associated(Faxa_swvdr)) Faxa_swvdr(:) = Faxa_swvdr(:)/3600.0_r8
+       if (associated(Faxa_swndr)) Faxa_swndr(:) = Faxa_swndr(:)/3600.0_r8
+       if (associated(Faxa_swvdf)) Faxa_swvdf(:) = Faxa_swvdf(:)/3600.0_r8
+       if (associated(Faxa_swndf)) Faxa_swndf(:) = Faxa_swndf(:)/3600.0_r8
+       if (associated(Faxa_swdn))  Faxa_swdn(:)  = Faxa_swdn(:)/3600.0_r8
+       if (associated(Faxa_swnet)) Faxa_swnet(:) = Faxa_swnet(:)/3600.0_r8
+       if (associated(Faxa_sen))   Faxa_sen(:)   = Faxa_sen(:)/3600.0_r8
+       if (associated(Faxa_lat))   Faxa_lat(:)   = Faxa_lat(:)/3600.0_r8
+    end if
 
     ! convert m to kg/m^2/s
-    if (associated(Faxa_rain))  Faxa_rain(:)  = Faxa_rain(:)/3600.0_r8*rhofw
-    if (associated(Faxa_rainc)) Faxa_rainc(:) = Faxa_rainc(:)/3600.0_r8*rhofw
-    if (associated(Faxa_rainl)) Faxa_rainl(:) = Faxa_rainl(:)/3600.0_r8*rhofw
-    if (associated(Faxa_snowc)) Faxa_snowc(:) = Faxa_snowc(:)/3600.0_r8*rhofw
-    if (associated(Faxa_snowl)) Faxa_snowl(:) = Faxa_snowl(:)/3600.0_r8*rhofw
+    if (precmax < 0.01_r8) then
+       if (mainproc) write(logunit,*) trim(subname),' precipitation related variables are already in kg/m^2/s unit!'
+    else
+       if (associated(Faxa_rain))  Faxa_rain(:)  = Faxa_rain(:)/3600.0_r8*rhofw
+       if (associated(Faxa_rainc)) Faxa_rainc(:) = Faxa_rainc(:)/3600.0_r8*rhofw
+       if (associated(Faxa_rainl)) Faxa_rainl(:) = Faxa_rainl(:)/3600.0_r8*rhofw
+       if (associated(Faxa_snowc)) Faxa_snowc(:) = Faxa_snowc(:)/3600.0_r8*rhofw
+       if (associated(Faxa_snowl)) Faxa_snowl(:) = Faxa_snowl(:)/3600.0_r8*rhofw
+    end if
 
     ! convert N/m^2 s to N/m^2
     if (associated(Faxa_taux))  Faxa_taux(:)  = Faxa_taux(:)/3600.0_r8

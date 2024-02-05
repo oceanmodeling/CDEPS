@@ -82,23 +82,35 @@ module cdeps_datm_comp
   use datm_datamode_cfsr_mod    , only : datm_datamode_cfsr_restart_write
   use datm_datamode_cfsr_mod    , only : datm_datamode_cfsr_restart_read
 
-  use datm_datamode_gfs_mod     , only : datm_datamode_gfs_advertise
-  use datm_datamode_gfs_mod     , only : datm_datamode_gfs_init_pointers
-  use datm_datamode_gfs_mod     , only : datm_datamode_gfs_advance
-  use datm_datamode_gfs_mod     , only : datm_datamode_gfs_restart_write
-  use datm_datamode_gfs_mod     , only : datm_datamode_gfs_restart_read
+  use datm_datamode_gfs_mod    , only : datm_datamode_gfs_advertise
+  use datm_datamode_gfs_mod    , only : datm_datamode_gfs_init_pointers
+  use datm_datamode_gfs_mod    , only : datm_datamode_gfs_advance
+  use datm_datamode_gfs_mod    , only : datm_datamode_gfs_restart_write
+  use datm_datamode_gfs_mod    , only : datm_datamode_gfs_restart_read
+
+  use datm_datamode_gfs_hafs_mod    , only : datm_datamode_gfs_hafs_advertise
+  use datm_datamode_gfs_hafs_mod    , only : datm_datamode_gfs_hafs_init_pointers
+  use datm_datamode_gfs_hafs_mod    , only : datm_datamode_gfs_hafs_advance
+  use datm_datamode_gfs_hafs_mod    , only : datm_datamode_gfs_hafs_restart_write
+  use datm_datamode_gfs_hafs_mod    , only : datm_datamode_gfs_hafs_restart_read
+  
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_advertise
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_init_pointers
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_advance
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_restart_write
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_restart_read
+
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_advertise
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_init_pointers
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_advance
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_restart_write
+  use datm_datamode_simple_mod  , only : datm_datamode_simple_restart_read
 
   use datm_datamode_atmmesh_mod , only : datm_datamode_atmmesh_advertise
   use datm_datamode_atmmesh_mod , only : datm_datamode_atmmesh_init_pointers
   use datm_datamode_atmmesh_mod , only : datm_datamode_atmmesh_advance
   use datm_datamode_atmmesh_mod , only : datm_datamode_atmmesh_restart_write
   use datm_datamode_atmmesh_mod , only : datm_datamode_atmmesh_restart_read
-
-  use datm_datamode_gfs_hafs_mod, only : datm_datamode_gfs_hafs_advertise
-  use datm_datamode_gfs_hafs_mod, only : datm_datamode_gfs_hafs_init_pointers
-  use datm_datamode_gfs_hafs_mod, only : datm_datamode_gfs_hafs_advance
-  use datm_datamode_gfs_hafs_mod, only : datm_datamode_gfs_hafs_restart_write
-  use datm_datamode_gfs_hafs_mod, only : datm_datamode_gfs_hafs_restart_read
 
   implicit none
   private ! except
@@ -231,7 +243,7 @@ contains
   !===============================================================================
 
   subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
-
+    use shr_nl_mod, only:  shr_nl_find_group_name
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
     type(ESMF_State)     :: importState, exportState
@@ -288,6 +300,11 @@ contains
     if (my_task == main_task) then
        nlfilename = "datm_in"//trim(inst_suffix)
        open (newunit=nu,file=trim(nlfilename),status="old",action="read")
+       call shr_nl_find_group_name(nu, 'datm_nml', status=ierr)
+       if (ierr > 0) then
+          write(logunit,*) 'ERROR: reading input namelist, '//trim(nlfilename)//' iostat=',ierr
+          call shr_sys_abort(subName//': namelist read error '//trim(nlfilename))
+       end if
        read (nu,nml=datm_nml,iostat=ierr)
        close(nu)
        if (ierr > 0) then
@@ -298,15 +315,15 @@ contains
        bcasttmp(1) = nx_global
        bcasttmp(2) = ny_global
        bcasttmp(3) = iradsw
-       if(flds_presaero)     bcasttmp(4)  = 1
-       if(flds_presndep)     bcasttmp(5)  = 1
-       if(flds_preso3)       bcasttmp(6)  = 1
-       if(flds_co2)          bcasttmp(7)  = 1
-       if(flds_wiso)         bcasttmp(8)  = 1
-       if(skip_restart_read) bcasttmp(9)  = 1
+       if(flds_presaero)     bcasttmp(4) = 1
+       if(flds_presndep)     bcasttmp(5) = 1
+       if(flds_preso3)       bcasttmp(6) = 1
+       if(flds_co2)          bcasttmp(7) = 1
+       if(flds_wiso)         bcasttmp(8) = 1
+       if(skip_restart_read) bcasttmp(9) = 1
        if(export_all)        bcasttmp(10) = 1
-
     end if
+
     call ESMF_GridCompGet(gcomp, vm=vm, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -357,7 +374,7 @@ contains
        write(logunit,F02)' flds_co2          = ',flds_co2
        write(logunit,F02)' flds_wiso         = ',flds_wiso
        write(logunit,F02)' skip_restart_read = ',skip_restart_read
-       write(logunit,F02)' export_all        = ',export_all
+       write(logunit,F02)' export_all     = ',export_all
     end if
 
     ! Validate sdat datamode
@@ -372,6 +389,8 @@ contains
          trim(datamode) == 'GFS'          .or. &
          trim(datamode) == 'ERA5'         .or. &
          trim(datamode) == 'GFS_HAFS'     .or. &
+         trim(datamode) == 'ERA5'         .or. &
+         trim(datamode) == 'SIMPLE'       .or. &
          trim(datamode) == 'ATMMESH') then
     else
        call shr_sys_abort(' ERROR illegal datm datamode = '//trim(datamode))
@@ -412,6 +431,9 @@ contains
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
     case ('GFS_HAFS')
        call datm_datamode_gfs_hafs_advertise(exportState, fldsExport, flds_scalar_name, rc)
+    case ('SIMPLE')
+       call datm_datamode_simple_advertise(exportState, fldsExport, flds_scalar_name, &
+            nlfilename, my_task, vm, rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end select
 
@@ -664,6 +686,8 @@ contains
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
        case('GFS_HAFS')
           call datm_datamode_gfs_hafs_init_pointers(exportState, sdat, rc)
+       case('SIMPLE')
+          call datm_datamode_simple_init_pointers(exportState, sdat, rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
        end select
 
@@ -690,6 +714,8 @@ contains
              call datm_datamode_atmmesh_restart_read(restfilm, inst_suffix, logunit, my_task, mpicom, sdat)
           case('GFS_HAFS')
              call datm_datamode_gfs_hafs_restart_read(restfilm, inst_suffix, logunit, my_task, mpicom, sdat)
+          case('SIMPLE')
+             call datm_datamode_simple_restart_read(restfilm, inst_suffix, logunit, my_task, mpicom, sdat)
           end select
        end if
 
@@ -755,6 +781,9 @@ contains
     case('GFS_HAFS')
        call datm_datamode_gfs_hafs_advance(exportstate, mainproc, logunit, mpicom, target_ymd, &
             target_tod, sdat%model_calendar, rc)
+    case('SIMPLE')
+       call datm_datamode_simple_advance(target_ymd, target_tod, target_mon, &
+            sdat%model_calendar, rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end select
 
@@ -783,19 +812,19 @@ contains
        case('CFSR')
           call datm_datamode_cfsr_restart_write(case_name, inst_suffix, target_ymd, target_tod, &
                logunit, my_task, sdat)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
        case('GFS')
           call datm_datamode_gfs_restart_write(case_name, inst_suffix, target_ymd, target_tod, &
                logunit, my_task, sdat)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       case('ATMMESH')
-          call datm_datamode_atmmesh_restart_write(case_name, inst_suffix, target_ymd, target_tod, &
-               logunit, my_task, sdat)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
        case('GFS_HAFS')
           call datm_datamode_gfs_hafs_restart_write(case_name, inst_suffix, target_ymd, target_tod, &
                logunit, my_task, sdat)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       case('SIMPLE')
+          call datm_datamode_simple_restart_write(case_name, inst_suffix, target_ymd, target_tod, &
+               logunit, my_task, sdat)
+       case('ATMMESH')
+          call datm_datamode_atmmesh_restart_write(case_name, inst_suffix, target_ymd, target_tod, &
+               logunit, my_task, sdat)
        end select
     end if
 

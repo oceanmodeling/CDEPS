@@ -160,6 +160,7 @@ contains
   !===============================================================================
 
   subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
+    use shr_nl_mod, only:  shr_nl_find_group_name
 
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
@@ -206,6 +207,8 @@ contains
     if (my_task == main_task) then
        nlfilename = "dice_in"//trim(inst_suffix)
        open (newunit=nu,file=trim(nlfilename),status="old",action="read")
+       call shr_nl_find_group_name(nu, 'dice_nml', status=ierr)
+
        read (nu,nml=dice_nml,iostat=ierr)
        close(nu)
        if (ierr > 0) then
@@ -217,14 +220,14 @@ contains
        write(logunit,F00)' datamode       = ',trim(datamode)
        write(logunit,F00)' model_meshfile = ',trim(model_meshfile)
        write(logunit,F00)' model_maskfile = ',trim(model_maskfile)
-       write(logunit,F01)' nx_global      = ',nx_global
-       write(logunit,F01)' ny_global      = ',ny_global
-       write(logunit,F03)' flux_swpf      = ',flux_swpf
-       write(logunit,F03)' flux_Qmin      = ',flux_Qmin
-       write(logunit,F02)' flux_Qacc      = ',flux_Qacc
-       write(logunit,F03)' flux_Qacc0     = ',flux_Qacc0
-       write(logunit,F00)' restfilm       = ',trim(restfilm)
-       write(logunit,F02)' export_all     = ',trim(restfilm)
+       write(logunit,F01)' nx_global  = ',nx_global
+       write(logunit,F01)' ny_global  = ',ny_global
+       write(logunit,F03)' flux_swpf  = ',flux_swpf
+       write(logunit,F03)' flux_Qmin  = ',flux_Qmin
+       write(logunit,F02)' flux_Qacc  = ',flux_Qacc
+       write(logunit,F03)' flux_Qacc0 = ',flux_Qacc0
+       write(logunit,F00)' restfilm = ',trim(restfilm)
+       write(logunit,F02)' export_all = ',export_all
        bcasttmp = 0
        bcasttmp(1) = nx_global
        bcasttmp(2) = ny_global
@@ -233,6 +236,7 @@ contains
        rbcasttmp(1) = flux_swpf
        rbcasttmp(2) = flux_Qmin
        rbcasttmp(3) = flux_Qacc0
+       if(export_all) bcasttmp(4) = 1
     endif
 
     ! broadcast namelist input
@@ -255,7 +259,7 @@ contains
     nx_global = bcasttmp(1)
     ny_global = bcasttmp(2)
     flux_Qacc = (bcasttmp(3) == 1)
-    export_all = (bcasttmp(4) == 1)
+    export_all= (bcasttmp(4) == 1)
 
     flux_swpf  = rbcasttmp(1)
     flux_Qmin  = rbcasttmp(2)

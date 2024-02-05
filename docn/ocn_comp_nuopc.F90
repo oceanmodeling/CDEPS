@@ -178,7 +178,7 @@ contains
 
   !===============================================================================
   subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
-
+    use shr_nl_mod, only:  shr_nl_find_group_name
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
     type(ESMF_State)     :: importState, exportState
@@ -224,6 +224,7 @@ contains
        ! Read docn_nml from nlfilename
        nlfilename = "docn_in"//trim(inst_suffix)
        open (newunit=nu,file=trim(nlfilename),status="old",action="read")
+       call shr_nl_find_group_name(nu, 'docn_nml', status=ierr)
        read (nu,nml=docn_nml,iostat=ierr)
        close(nu)
        if (ierr > 0) then
@@ -242,12 +243,13 @@ contains
        write(logunit,F02)' skip_restart_read = ',skip_restart_read
        write(logunit,F00)' import_data_fields = ',trim(import_data_fields)
        write(logunit,*)  ' sst_constant_value = ',sst_constant_value
-       write(logunit,F02)' export_all         = ',export_all
+       write(logunit,F02)' export_all        = ', export_all
 
        bcasttmp = 0
        bcasttmp(1) = nx_global
        bcasttmp(2) = ny_global
        if(skip_restart_read) bcasttmp(3) = 1
+       if(export_all) bcasttmp(4) = 1
        rtmp(1) = sst_constant_value
        if(export_all) bcasttmp(4) = 1
     endif
@@ -269,13 +271,13 @@ contains
 
     call ESMF_VMBroadcast(vm, bcasttmp, 4, main_task, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
     call ESMF_VMBroadcast(vm, rtmp, 1, main_task, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     nx_global = bcasttmp(1)
     ny_global = bcasttmp(2)
     skip_restart_read = (bcasttmp(3) == 1)
+    export_all = (bcasttmp(4) == 1)
     sst_constant_value = rtmp(1)
     export_all = (bcasttmp(4) == 1)
 
