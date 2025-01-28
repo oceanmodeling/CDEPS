@@ -16,8 +16,6 @@ module datm_datamode_atmmesh_mod
   public  :: datm_datamode_atmmesh_advertise
   public  :: datm_datamode_atmmesh_init_pointers
   public  :: datm_datamode_atmmesh_advance
-  public  :: datm_datamode_atmmesh_restart_read
-  public  :: datm_datamode_atmmesh_restart_write
 
   ! export fields
   real(r8), pointer :: Sa_pslv   (:) => null() ! sea level pressure
@@ -141,40 +139,5 @@ contains
     !end do
 
   end subroutine datm_datamode_atmmesh_advance
-
-  !===============================================================================
-  subroutine datm_datamode_atmmesh_restart_write(case_name, inst_suffix, ymd, tod, &
-       logunit, my_task, sdat)
-
-    ! input/output variables
-    character(len=*)            , intent(in)    :: case_name
-    character(len=*)            , intent(in)    :: inst_suffix
-    integer                     , intent(in)    :: ymd       ! model date
-    integer                     , intent(in)    :: tod       ! model sec into model date
-    integer                     , intent(in)    :: logunit
-    integer                     , intent(in)    :: my_task
-    type(shr_strdata_type)      , intent(inout) :: sdat
-    !-------------------------------------------------------------------------------
-
-    call dshr_restart_write(rpfile, case_name, 'datm', inst_suffix, ymd, tod, &
-         logunit, my_task, sdat)
-
-  end subroutine datm_datamode_atmmesh_restart_write
-
-  !===============================================================================
-  subroutine datm_datamode_atmmesh_restart_read(rest_filem, inst_suffix, logunit, my_task, mpicom, sdat)
-
-    ! input/output arguments
-    character(len=*)            , intent(inout) :: rest_filem
-    character(len=*)            , intent(in)    :: inst_suffix
-    integer                     , intent(in)    :: logunit
-    integer                     , intent(in)    :: my_task
-    integer                     , intent(in)    :: mpicom
-    type(shr_strdata_type)      , intent(inout) :: sdat
-    !-------------------------------------------------------------------------------
-
-    call dshr_restart_read(rest_filem, rpfile, inst_suffix, nullstr, logunit, my_task, mpicom, sdat)
-
-  end subroutine datm_datamode_atmmesh_restart_read
 
 end module datm_datamode_atmmesh_mod
