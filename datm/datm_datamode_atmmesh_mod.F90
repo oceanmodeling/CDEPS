@@ -24,6 +24,7 @@ module datm_datamode_atmmesh_mod
   real(r8), pointer :: Sa_t2m    (:) => null() ! surface temperature height 2m
   real(r8), pointer :: Sa_q2m    (:) => null() ! surface humidity height 2m
   real(r8), pointer :: Faxa_lwdn (:) => null() ! downward longwave radiation
+  real(r8), pointer :: Faxa_swdn (:) => null() ! downward shortwave radiation
   real(r8), pointer :: Faxa_swnet(:) => null() ! net shortwave radiation
   real(r8), pointer :: Faxa_rain (:) => null() ! total precipitation
 
@@ -58,6 +59,7 @@ contains
     call dshr_fldList_add(fldsExport, 'Sa_t2m' )
     call dshr_fldList_add(fldsExport, 'Sa_q2m' )
     call dshr_fldList_add(fldsExport, 'Faxa_lwdn')
+    call dshr_fldList_add(fldsExport, 'Faxa_swdn')
     call dshr_fldList_add(fldsExport, 'Faxa_swnet')
     call dshr_fldList_add(fldsExport, 'Faxa_rain')
 
@@ -98,6 +100,8 @@ contains
     if (chkerr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Faxa_lwdn' , fldptr1=Faxa_lwdn , allowNullReturn=.true., rc=rc)
     if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Faxa_swdn' , fldptr1=Faxa_swdn , allowNullReturn=.true., rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Faxa_swnet', fldptr1=Faxa_swnet, allowNullReturn=.true., rc=rc)
     if (chkerr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Faxa_rain' , fldptr1=Faxa_rain , allowNullReturn=.true., rc=rc)
@@ -109,6 +113,7 @@ contains
     if (associated(Sa_t2m    )) Sa_t2m    (:) = 0.0_r8
     if (associated(Sa_q2m    )) Sa_q2m    (:) = 0.0_r8
     if (associated(Faxa_lwdn )) Faxa_lwdn (:) = 0.0_r8
+    if (associated(Faxa_swdn )) Faxa_swdn (:) = 0.0_r8
     if (associated(Faxa_swnet)) Faxa_swnet(:) = 0.0_r8
     if (associated(Faxa_rain )) Faxa_rain (:) = 0.0_r8
 
