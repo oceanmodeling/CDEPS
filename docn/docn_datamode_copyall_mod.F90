@@ -22,6 +22,10 @@ module docn_datamode_copyall_mod
   real(r8), pointer :: So_u(:)      => null()
   real(r8), pointer :: So_v(:)      => null()
   real(r8), pointer :: So_s(:)      => null()
+  real(r8), pointer :: So_dhdx(:)   => null()
+  real(r8), pointer :: So_dhdy(:)   => null()
+  real(r8), pointer :: Fioo_q(:)    => null()
+  real(r8), pointer :: So_h(:)      => null()
 
   real(r8) , parameter :: tkfrz   = shr_const_tkfrz       ! freezing point, fresh water (kelvin)
   real(r8) , parameter :: ocnsalt = shr_const_ocn_ref_sal ! ocean reference salinity
@@ -55,6 +59,10 @@ contains
     call dshr_fldList_add(fldsExport, 'So_s'                )
     call dshr_fldList_add(fldsExport, 'So_u'                )
     call dshr_fldList_add(fldsExport, 'So_v'                )
+    call dshr_fldList_add(fldsExport, 'So_dhdx'             )
+    call dshr_fldList_add(fldsExport, 'So_dhdy'             )
+    call dshr_fldList_add(fldsExport, 'Fioo_q'              )
+    call dshr_fldList_add(fldsExport, 'So_h'                )
 
     fldlist => fldsExport ! the head of the linked list
     do while (associated(fldlist))
@@ -91,6 +99,14 @@ contains
     if (chkerr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'So_v'     , fldptr1=So_v     , allowNullReturn=.true., rc=rc)
     if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'So_dhdx'  , fldptr1=So_dhdx  , allowNullReturn=.true. , rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'So_dhdy'  , fldptr1=So_dhdy  , allowNullReturn=.true. , rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Fioo_q'   , fldptr1=Fioo_q   , allowNullReturn=.true. , rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'So_h'     , fldptr1=So_h     , allowNullReturn=.true. , rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
 
     if (associated(So_u)) then
       So_u(:) = 0.0_r8
@@ -102,6 +118,18 @@ contains
       So_s(:) = ocnsalt
     end if
     So_t(:) = TkFrz
+    if (associated(So_dhdx)) then
+      So_dhdx(:) = 0.0_r8
+    end if
+    if (associated(So_dhdy)) then
+      So_dhdy(:) = 0.0_r8
+    end if
+    if (associated(Fioo_q)) then
+      Fioo_q(:) = 0.0_r8
+    end if
+    if (associated(So_h)) then
+      So_h(:) = 0.0_r8
+    end if
 
     ! Set export state ocean fraction (So_omask)
     So_omask(:) = ocn_fraction(:)
