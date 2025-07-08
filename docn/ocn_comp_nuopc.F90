@@ -282,7 +282,6 @@ contains
     skip_restart_read = (bcasttmp(3) == 1)
     export_all = (bcasttmp(4) == 1)
     sst_constant_value = rtmp(1)
-    export_all = (bcasttmp(4) == 1)
 
     ! Special logic for prescribed aquaplanet
     if (datamode(1:9) == 'sst_aquap' .and. trim(datamode) /= 'sst_aquap_constant') then
