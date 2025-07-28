@@ -38,7 +38,7 @@ module datm_datamode_era5_mod
   real(r8), pointer :: Faxa_rainl(:)        => null()
   real(r8), pointer :: Faxa_snow(:)         => null()
   real(r8), pointer :: Faxa_snowc(:)        => null()
-  real(r8), pointer :: Faxa_snowl(:)        => null() 
+  real(r8), pointer :: Faxa_snowl(:)        => null()
   real(r8), pointer :: Faxa_swndr(:)        => null()
   real(r8), pointer :: Faxa_swndf(:)        => null()
   real(r8), pointer :: Faxa_swvdr(:)        => null()
