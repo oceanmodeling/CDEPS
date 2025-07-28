@@ -36,8 +36,9 @@ module datm_datamode_era5_mod
   real(r8), pointer :: Faxa_rain(:)         => null()
   real(r8), pointer :: Faxa_rainc(:)        => null()
   real(r8), pointer :: Faxa_rainl(:)        => null()
+  real(r8), pointer :: Faxa_snow(:)         => null()
   real(r8), pointer :: Faxa_snowc(:)        => null()
-  real(r8), pointer :: Faxa_snowl(:)        => null()
+  real(r8), pointer :: Faxa_snowl(:)        => null() 
   real(r8), pointer :: Faxa_swndr(:)        => null()
   real(r8), pointer :: Faxa_swndf(:)        => null()
   real(r8), pointer :: Faxa_swvdr(:)        => null()
@@ -113,6 +114,7 @@ contains
     call dshr_fldList_add(fldsExport, 'Faxa_rain'  )
     call dshr_fldList_add(fldsExport, 'Faxa_rainc' )
     call dshr_fldList_add(fldsExport, 'Faxa_rainl' )
+    call dshr_fldList_add(fldsExport, 'Faxa_snow'  )
     call dshr_fldList_add(fldsExport, 'Faxa_snowc' )
     call dshr_fldList_add(fldsExport, 'Faxa_snowl' )
     call dshr_fldList_add(fldsExport, 'Faxa_swndr' )
@@ -204,6 +206,8 @@ contains
     call dshr_state_getfldptr(exportState, 'Faxa_rainc' , fldptr1=Faxa_rainc , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Faxa_rainl' , fldptr1=Faxa_rainl , allowNullReturn=.true., rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'Faxa_snow' , fldptr1=Faxa_snow , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'Faxa_snowc' , fldptr1=Faxa_snowc , allowNullReturn=.true., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -423,6 +427,7 @@ contains
        if (associated(Faxa_rain))  Faxa_rain(:)  = Faxa_rain(:)/3600.0_r8*rhofw
        if (associated(Faxa_rainc)) Faxa_rainc(:) = Faxa_rainc(:)/3600.0_r8*rhofw
        if (associated(Faxa_rainl)) Faxa_rainl(:) = Faxa_rainl(:)/3600.0_r8*rhofw
+       if (associated(Faxa_snow))  Faxa_snow(:)  = Faxa_snow(:)/3600.0_r8*rhofw
        if (associated(Faxa_snowc)) Faxa_snowc(:) = Faxa_snowc(:)/3600.0_r8*rhofw
        if (associated(Faxa_snowl)) Faxa_snowl(:) = Faxa_snowl(:)/3600.0_r8*rhofw
     end if
