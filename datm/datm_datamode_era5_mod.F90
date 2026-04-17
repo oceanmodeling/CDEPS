@@ -63,6 +63,7 @@ module datm_datamode_era5_mod
   real(r8), pointer :: strm_v(:)            => null()
   real(r8), pointer :: strm_u10m(:)         => null()
   real(r8), pointer :: strm_v10m(:)         => null()
+  real(r8), pointer :: strm_Faxa_swdn(:)    => null()
 
   real(r8) :: t2max   ! units detector
   real(r8) :: td2max  ! units detector
@@ -170,6 +171,8 @@ contains
     call shr_strdata_get_stream_pointer(sdat, 'Sa_u10m'   , strm_u10m, rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call shr_strdata_get_stream_pointer(sdat, 'Sa_v10m'   , strm_v10m, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call shr_strdata_get_stream_pointer(sdat, 'Faxa_swdn' , strm_Faxa_swdn, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     ! get export state pointers
@@ -384,10 +387,10 @@ contains
 
     ! fabricate required shortwave band components from swdn
     if (associated(strm_Faxa_swdn)) then
-       if (associated(Faxa_swvdr)) Faxa_swvdr(n) = strm_Faxa_swdn(n)*(0.28_R8)
-       if (associated(Faxa_swndr)) Faxa_swndr(n) = strm_Faxa_swdn(n)*(0.31_R8)
-       if (associated(Faxa_swvdf)) Faxa_swvdf(n) = strm_Faxa_swdn(n)*(0.24_R8)
-       if (associated(Faxa_swndf)) Faxa_swndf(n) = strm_Faxa_swdn(n)*(0.17_R8)
+       if (associated(Faxa_swvdr)) Faxa_swvdr(:) = strm_Faxa_swdn(:)*(0.28_R8)
+       if (associated(Faxa_swndr)) Faxa_swndr(:) = strm_Faxa_swdn(:)*(0.31_R8)
+       if (associated(Faxa_swvdf)) Faxa_swvdf(:) = strm_Faxa_swdn(:)*(0.24_R8)
+       if (associated(Faxa_swndf)) Faxa_swndf(:) = strm_Faxa_swdn(:)*(0.17_R8)
     end if
 
     !----------------------------------------------------------
