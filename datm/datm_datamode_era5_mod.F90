@@ -382,23 +382,13 @@ contains
     ! shortwave bands
     !----------------------------------------------------------
 
-    !--- shortwave radiation (Faxa_* basically holds albedo) ---
-    !--- see comments for Faxa_swnet
-    if (associated(Faxa_swvdr)) Faxa_swvdr(:) = Faxa_swdn(:)*Faxa_swvdr(:)
-    if (associated(Faxa_swndr)) Faxa_swndr(:) = Faxa_swdn(:)*Faxa_swndr(:)
-    if (associated(Faxa_swvdf)) Faxa_swvdf(:) = Faxa_swdn(:)*Faxa_swvdf(:)
-    if (associated(Faxa_swndf)) Faxa_swndf(:) = Faxa_swdn(:)*Faxa_swndf(:)
-
-    !--- TODO: need to understand relationship between shortwave bands and
-    !--- net shortwave rad. currently it is provided directly from ERA5
-    !--- and the total of the bands are not consistent with the swnet
-    !--- swnet: a diagnostic quantity ---
-    !if (associated(Faxa_swnet)) then
-    !  if (associated(Faxa_swndr) .and. associated(Faxa_swvdr) .and. &
-    !      associated(Faxa_swndf) .and. associated(Faxa_swvdf)) then
-    !    Faxa_swnet(:) = Faxa_swndr(:) + Faxa_swvdr(:) + Faxa_swndf(:) + Faxa_swvdf(:)
-    !  end if
-    !end if
+    ! fabricate required shortwave band components from swdn
+    if (associated(strm_Faxa_swdn)) then
+       if (associated(Faxa_swvdr)) Faxa_swvdr(n) = strm_Faxa_swdn(n)*(0.28_R8)
+       if (associated(Faxa_swndr)) Faxa_swndr(n) = strm_Faxa_swdn(n)*(0.31_R8)
+       if (associated(Faxa_swvdf)) Faxa_swvdf(n) = strm_Faxa_swdn(n)*(0.24_R8)
+       if (associated(Faxa_swndf)) Faxa_swndf(n) = strm_Faxa_swdn(n)*(0.17_R8)
+    end if
 
     !----------------------------------------------------------
     ! unit conversions (temporal resolution is hourly)
