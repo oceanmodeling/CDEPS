@@ -27,6 +27,7 @@ module cdeps_dnwm_comp
   use NUOPC            , only : NUOPC_CompDerive, NUOPC_CompSetEntryPoint, NUOPC_CompSpecialize
   use NUOPC            , only : NUOPC_CompAttributeGet, NUOPC_Advertise, NUOPC_IsConnected
   use NUOPC            , only : NUOPC_FieldDictionaryHasEntry, NUOPC_FieldDictionaryAddEntry
+  use NUOPC            , only : NUOPC_SetTimestamp
   use NUOPC_Model      , only : model_routine_SS        => SetServices
   use NUOPC_Model      , only : model_label_Advance     => label_Advance
   use NUOPC_Model      , only : model_label_SetRunClock => label_SetRunClock
@@ -356,6 +357,15 @@ contains
        end if
     end if
 
+    ! Stamp the export with the clock's initial time so the export field is valid
+    ! AT the start time. On the direct NWM->OCN connector, OCN's run phase checks
+    ! import fields are at currTime at the FIRST step -- before dnwm's ModelAdvance
+    ! runs -- so without an init-time stamp the field carries no/initial timestamp
+    ! and NUOPC aborts "Import Fields not at current time". (NUOPC_SetTimestamp in
+    ! ModelAdvance keeps it current on subsequent steps.)
+    call NUOPC_SetTimestamp(exportState, clock, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
    end subroutine InitializeRealize
 
   !===============================================================================
@@ -403,6 +413,16 @@ contains
 
     ! run dnwm
     call dnwm_comp_run(gcomp, exportState, next_ymd, next_tod, restart_write, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+    ! Stamp the export fields with the component clock's CURRENT time. On the direct
+    ! NWM->OCN connector (no CMEPS mediator to broker time via label_TimestampExport)
+    ! the connector copies the export field AND its timestamp to SCHISM's import; if
+    ! the stamp does not match SCHISM's currTime, NUOPC aborts at run with
+    ! "Import Fields not at current time" (NUOPC_ModelBase INCOMPATIBILITY). dnwm
+    ! interpolates its stream to next_time for the zero-order hold, but for the
+    ! coupler the value is valid AT currTime, so stamp with currTime.
+    call NUOPC_SetTimestamp(exportState, clock, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   end subroutine ModelAdvance
