@@ -397,13 +397,18 @@ contains
     call NUOPC_ModelGet(gcomp, modelClock=clock, importState=importState, exportState=exportState, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    ! For nuopc - the component clock is advanced at the end of the time interval
-    ! For these to match for now - need to advance nuopc one timestep ahead for
-    ! shr_strdata time interpolation
-    call ESMF_ClockGet( clock, currTime=currTime, timeStep=timeStep, rc=rc)
+    ! One-way direct NWM->OCN connector: there is no CMEPS mediator to broker time.
+    ! SCHISM applies the imported discharge as a zero-order hold over its current
+    ! step [currTime, currTime+dt] and the export is stamped with currTime (below),
+    ! so interpolate the stream AT currTime -- not currTime+timeStep. The CDEPS dshr
+    ! default reads one step ahead because the mediator schedule consumes the data at
+    ! a later phase; on this mediator-less route that lead would inject the NEXT
+    ! interval's flow one step early -- invisible to a constant-discharge test, but a
+    ! ramping hydrograph would show the offset. Reading currTime keeps the exported
+    ! value consistent with its currTime stamp.
+    call ESMF_ClockGet( clock, currTime=currTime, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    nextTime = currTime + timeStep
-    call ESMF_TimeGet( nextTime, yy=yr, mm=mon, dd=day, s=next_tod, rc=rc )
+    call ESMF_TimeGet( currTime, yy=yr, mm=mon, dd=day, s=next_tod, rc=rc )
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call shr_cal_ymd2date(yr, mon, day, next_ymd)
 
