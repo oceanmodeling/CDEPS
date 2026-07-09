@@ -16,7 +16,7 @@ module cdeps_dnwm_comp
   ! gridded area-flux regrid). Mirrors DROF's datamode='copyall' passthrough.
   !----------------------------------------------------------------------------
   use ESMF             , only : ESMF_VM, ESMF_VMBroadcast, ESMF_GridCompGet
-  use ESMF             , only : ESMF_Mesh, ESMF_GridComp, ESMF_Time
+  use ESMF             , only : ESMF_Mesh, ESMF_GridComp, ESMF_Time, ESMF_TimeInterval
   use ESMF             , only : ESMF_State, ESMF_Clock, ESMF_SUCCESS, ESMF_LOGMSG_INFO
   use ESMF             , only : ESMF_TraceRegionEnter, ESMF_TraceRegionExit
   use ESMF             , only : ESMF_METHOD_INITIALIZE, ESMF_MethodRemove
@@ -84,6 +84,12 @@ module cdeps_dnwm_comp
   integer                      :: ny_global
   logical                      :: skip_restart_read = .false.         ! true => skip restart read
   logical                      :: export_all = .false.                ! true => export all fields, do not check connected or not
+  logical                      :: advance_to_next_time = .false.      ! stream interpolation target: .false. => currTime
+                                                                      ! (direct NWM->OCN connector, the validated route: the
+                                                                      ! consumer holds the value over [t,t+dt], so the export
+                                                                      ! must be valid at the window START); .true. => the
+                                                                      ! standard CDEPS next-time convention for runs where a
+                                                                      ! mediator consumes the export at a later phase
 
   logical                      :: diagnose_data = .true.
   integer      , parameter     :: main_task=0                       ! task number of main task
@@ -174,7 +180,7 @@ contains
     integer           :: ierr       ! error code
     type(fldlist_type), pointer :: fldList
     type(ESMF_VM)     :: vm
-    integer :: bcasttmp(4)
+    integer :: bcasttmp(5)
     character(len=*),parameter :: subname=trim(modName)//':(InitializeAdvertise) '
     character(*)    ,parameter :: F00 = "('(" // trim(modName) // ") ',8a)"
     character(*)    ,parameter :: F01 = "('(" // trim(modName) // ") ',a,2x,i8)"
@@ -184,7 +190,8 @@ contains
     logical :: isPresent
 
     namelist / dnwm_nml / datamode, model_meshfile, model_maskfile, &
-         restfilm, nx_global, ny_global, skip_restart_read, export_all
+         restfilm, nx_global, ny_global, skip_restart_read, export_all, &
+         advance_to_next_time
 
     rc = ESMF_SUCCESS
 
@@ -194,6 +201,12 @@ contains
     ! Obtain flds_scalar values, mpi values, multi-instance values and
     ! set logunit and set shr logging to my log file. DNWM plays the runoff
     ! (ROF) role in the coupled system, so reuse the 'ROF' component string.
+    ! DELIBERATE IDENTITY CHOICE with two consequences to know: (1) the dshr
+    ! default log name becomes d<rof>.log = drof.log -- set the 'logfile'
+    ! component attribute (e.g. logfile = dnwm.log in the run config) for a
+    ! distinct log; (2) PIO settings are keyed to ROF, so running dnwm and a
+    ! real drof in the same executable is NOT supported. Restart pointer files
+    ! use the distinct 'nwm' token (rpointer.nwm.*), see dnwm_comp_run.
     call dshr_init(gcomp, 'ROF', mpicom, my_task, inst_index, inst_suffix, &
          flds_scalar_name, flds_scalar_num, flds_scalar_index_nx, flds_scalar_index_ny, &
          logunit, rc=rc)
@@ -224,11 +237,13 @@ contains
        write(logunit,F00)' restfilm = ',trim(restfilm)
        write(logunit,F02)' skip_restart_read = ',skip_restart_read
        write(logunit,F02)' export_all = ', export_all
+       write(logunit,F02)' advance_to_next_time = ', advance_to_next_time
        bcasttmp = 0
        bcasttmp(1) = nx_global
        bcasttmp(2) = ny_global
        if(skip_restart_read) bcasttmp(3) = 1
        if(export_all) bcasttmp(4) = 1
+       if(advance_to_next_time) bcasttmp(5) = 1
     end if
 
     ! broadcast namelist input
@@ -243,13 +258,14 @@ contains
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call ESMF_VMBroadcast(vm, restfilm, CL, main_task, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call ESMF_VMBroadcast(vm, bcasttmp, 4, main_task, rc=rc)
+    call ESMF_VMBroadcast(vm, bcasttmp, 5, main_task, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     nx_global = bcasttmp(1)
     ny_global = bcasttmp(2)
     skip_restart_read = (bcasttmp(3) == 1)
     export_all = (bcasttmp(4) == 1)
+    advance_to_next_time = (bcasttmp(5) == 1)
 
     ! Validate datamode
     if (trim(datamode) == 'copyall') then
@@ -333,7 +349,8 @@ contains
     call shr_cal_ymd2date(current_year, current_mon, current_day, current_ymd)
 
     ! Run dnwm
-    call dnwm_comp_run(gcomp, exportstate, current_ymd, current_tod, restart_write=.false., rc=rc)
+    call dnwm_comp_run(gcomp, exportstate, current_ymd, current_tod, current_ymd, current_tod, &
+         restart_write=.false., rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     ! Add scalars to export state. The direct NWM->OCN (SCHISM) connector does NOT
@@ -380,9 +397,12 @@ contains
     ! local variables
     type(ESMF_State)        :: importState, exportState
     type(ESMF_Clock)        :: clock
-    type(ESMF_Time)         :: currTime
-    integer                 :: current_ymd   ! model date at the CURRENT time
-    integer                 :: current_tod   ! model sec into model date at the CURRENT time
+    type(ESMF_TimeInterval) :: timeStep
+    type(ESMF_Time)         :: currTime, nextTime
+    integer                 :: interp_ymd    ! stream interpolation target date
+    integer                 :: interp_tod    ! stream interpolation target sec
+    integer                 :: next_ymd      ! window-end date (restart naming, CDEPS convention)
+    integer                 :: next_tod      ! window-end sec
     integer                 :: yr            ! year
     integer                 :: mon           ! month
     integer                 :: day           ! day in month
@@ -398,27 +418,40 @@ contains
     call NUOPC_ModelGet(gcomp, modelClock=clock, importState=importState, exportState=exportState, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    ! One-way direct NWM->OCN connector: there is no CMEPS mediator to broker time.
-    ! SCHISM applies the imported discharge as a zero-order hold over its current
-    ! step [currTime, currTime+dt] and the export is stamped with currTime (below),
-    ! so interpolate the stream AT currTime -- not currTime+timeStep. The CDEPS dshr
-    ! default reads one step ahead because the mediator schedule consumes the data at
-    ! a later phase; on this mediator-less route that lead would inject the NEXT
-    ! interval's flow one step early -- invisible to a constant-discharge test, but a
-    ! ramping hydrograph would show the offset. Reading currTime keeps the exported
-    ! value consistent with its currTime stamp.
-    call ESMF_ClockGet( clock, currTime=currTime, rc=rc)
+    ! Stream interpolation target. Default (advance_to_next_time=.false., the
+    ! validated direct NWM->OCN route): there is no CMEPS mediator to broker time;
+    ! the consumer applies the imported discharge as a zero-order hold over its
+    ! current step [currTime, currTime+dt] and the export is stamped with currTime
+    ! (below), so interpolate the stream AT currTime. The standard CDEPS convention
+    ! reads one step ahead because a mediator schedule consumes the data at a later
+    ! phase; on the mediator-less route that lead would inject the NEXT interval's
+    ! flow one step early -- invisible to a constant-discharge test, exposed by a
+    ! ramping hydrograph. Set advance_to_next_time=.true. (namelist) to restore the
+    ! next-time convention when a mediator consumes this export.
+    call ESMF_ClockGet( clock, currTime=currTime, timeStep=timeStep, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call ESMF_TimeGet( currTime, yy=yr, mm=mon, dd=day, s=current_tod, rc=rc )
+    nextTime = currTime + timeStep
+    call ESMF_TimeGet( nextTime, yy=yr, mm=mon, dd=day, s=next_tod, rc=rc )
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call shr_cal_ymd2date(yr, mon, day, current_ymd)
+    call shr_cal_ymd2date(yr, mon, day, next_ymd)
+    if (advance_to_next_time) then
+       interp_ymd = next_ymd
+       interp_tod = next_tod
+    else
+       call ESMF_TimeGet( currTime, yy=yr, mm=mon, dd=day, s=interp_tod, rc=rc )
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call shr_cal_ymd2date(yr, mon, day, interp_ymd)
+    end if
 
     ! write restart if alarm is ringing
     restart_write = dshr_check_restart_alarm(clock, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    ! run dnwm
-    call dnwm_comp_run(gcomp, exportState, current_ymd, current_tod, restart_write, rc=rc)
+    ! run dnwm. Restart artifacts are always named at the window END (next_ymd/tod),
+    ! the CDEPS convention: a continued run resumes at that time and looks for
+    ! rpointer files stamped with it, independent of the interpolation target.
+    call dnwm_comp_run(gcomp, exportState, interp_ymd, interp_tod, next_ymd, next_tod, &
+         restart_write, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     ! Stamp the export fields with the component clock's CURRENT time. On the direct
@@ -434,7 +467,8 @@ contains
   end subroutine ModelAdvance
 
   !===============================================================================
-  subroutine dnwm_comp_run(gcomp, exportState, target_ymd, target_tod, restart_write, rc)
+  subroutine dnwm_comp_run(gcomp, exportState, target_ymd, target_tod, restart_ymd, restart_tod, &
+       restart_write, rc)
 
     ! --------------------------
     ! advance dnwm
@@ -443,8 +477,10 @@ contains
     ! input/output variables:
     type(ESMF_GridComp), intent(in)  :: gcomp
     type(ESMF_State) , intent(inout) :: exportState
-    integer          , intent(in)    :: target_ymd       ! model date
-    integer          , intent(in)    :: target_tod       ! model sec into model date
+    integer          , intent(in)    :: target_ymd       ! stream interpolation target date
+    integer          , intent(in)    :: target_tod       ! stream interpolation target sec
+    integer          , intent(in)    :: restart_ymd      ! restart naming date (window end)
+    integer          , intent(in)    :: restart_tod      ! restart naming sec (window end)
     logical          , intent(in)    :: restart_write
     integer          , intent(out)   :: rc
 
@@ -528,9 +564,9 @@ contains
     ! write restarts if needed (datamode is validated to 'copyall' at advertise,
     ! so no per-mode gate is required here)
     if (restart_write) then
-       call shr_get_rpointer_name(gcomp, 'nwm', target_ymd, target_tod, rpfile, 'write', rc)
+       call shr_get_rpointer_name(gcomp, 'nwm', restart_ymd, restart_tod, rpfile, 'write', rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call dshr_restart_write(rpfile, case_name, 'dnwm', inst_suffix, target_ymd, target_tod, &
+       call dshr_restart_write(rpfile, case_name, 'dnwm', inst_suffix, restart_ymd, restart_tod, &
             logunit, my_task, sdat, rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end if
