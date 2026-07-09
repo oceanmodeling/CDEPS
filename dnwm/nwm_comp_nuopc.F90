@@ -16,14 +16,12 @@ module cdeps_dnwm_comp
   ! gridded area-flux regrid). Mirrors DROF's datamode='copyall' passthrough.
   !----------------------------------------------------------------------------
   use ESMF             , only : ESMF_VM, ESMF_VMBroadcast, ESMF_GridCompGet
-  use ESMF             , only : ESMF_Mesh, ESMF_GridComp, ESMF_Time, ESMF_TimeInterval
+  use ESMF             , only : ESMF_Mesh, ESMF_GridComp, ESMF_Time
   use ESMF             , only : ESMF_State, ESMF_Clock, ESMF_SUCCESS, ESMF_LOGMSG_INFO
   use ESMF             , only : ESMF_TraceRegionEnter, ESMF_TraceRegionExit
-  use ESMF             , only : ESMF_Alarm, ESMF_METHOD_INITIALIZE, ESMF_MethodAdd, ESMF_MethodRemove
+  use ESMF             , only : ESMF_METHOD_INITIALIZE, ESMF_MethodRemove
   use ESMF             , only : ESMF_TimeGet, ESMF_ClockGet, ESMF_GridCompSetEntryPoint
-  use ESMF             , only : ESMF_ClockGetAlarm, ESMF_AlarmIsRinging, ESMF_AlarmRingerOff
   use ESMF             , only : operator(+), ESMF_LogWrite
-  use ESMF             , only : ESMF_StateGet, ESMF_StateItem_Flag, ESMF_STATEITEM_FIELD, operator(==)
   use NUOPC            , only : NUOPC_CompDerive, NUOPC_CompSetEntryPoint, NUOPC_CompSpecialize
   use NUOPC            , only : NUOPC_CompAttributeGet, NUOPC_Advertise, NUOPC_IsConnected
   use NUOPC            , only : NUOPC_FieldDictionaryHasEntry, NUOPC_FieldDictionaryAddEntry
@@ -33,12 +31,11 @@ module cdeps_dnwm_comp
   use NUOPC_Model      , only : model_label_SetRunClock => label_SetRunClock
   use NUOPC_Model      , only : model_label_Finalize    => label_Finalize
   use NUOPC_Model      , only : NUOPC_ModelGet, SetVM
-  use shr_kind_mod     , only : r8=>shr_kind_r8, i8=>shr_kind_i8, cl=>shr_kind_cl, cs=>shr_kind_cs
-  use shr_const_mod    , only : SHR_CONST_SPVAL
+  use shr_kind_mod     , only : r8=>shr_kind_r8, cl=>shr_kind_cl, cs=>shr_kind_cs
   use shr_cal_mod      , only : shr_cal_ymd2date
   use shr_log_mod      , only : shr_log_setLogUnit, shr_log_error
   use dshr_methods_mod , only : dshr_state_getfldptr, dshr_state_diagnose, chkerr, memcheck
-  use dshr_strdata_mod , only : shr_strdata_type, shr_strdata_advance, shr_strdata_get_stream_domain
+  use dshr_strdata_mod , only : shr_strdata_type, shr_strdata_advance
   use dshr_strdata_mod , only : shr_strdata_init_from_config
   use dshr_mod         , only : dshr_model_initphase, dshr_init
   use dshr_mod         , only : dshr_state_setscalar, dshr_set_runclock, dshr_check_restart_alarm
@@ -184,6 +181,8 @@ contains
     character(*)    ,parameter :: F02 = "('(" // trim(modName) // ") ',a,l6)"
     !-------------------------------------------------------------------------------
 
+    logical :: isPresent
+
     namelist / dnwm_nml / datamode, model_meshfile, model_maskfile, &
          restfilm, nx_global, ny_global, skip_restart_read, export_all
 
@@ -262,7 +261,9 @@ contains
 
     ! river_volume_flux is not a CF/standard NUOPC field; register it (m3 s-1
     ! volumetric discharge) so it can be advertised, realized and connected.
-    if (.not. NUOPC_FieldDictionaryHasEntry(trim(fldname_river), rc=rc)) then
+    isPresent = NUOPC_FieldDictionaryHasEntry(trim(fldname_river), rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (.not. isPresent) then
        call NUOPC_FieldDictionaryAddEntry(trim(fldname_river), "m3 s-1", rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end if
@@ -291,7 +292,7 @@ contains
 
     ! local variables
     type(ESMF_TIME) :: currTime
-    type(ESMF_StateItem_Flag) :: itemtype_scalar  ! presence of cpl_scalars in exportState
+    logical         :: connected    ! cpl_scalars connected on this route?
     integer         :: current_ymd  ! model date
     integer         :: current_year ! model year
     integer         :: current_mon  ! model month
@@ -348,8 +349,9 @@ contains
        ! "Object being used before creation - Bad Object". NUOPC_IsConnected is the
        ! correct route-agnostic guard (a present-but-unrealized placeholder is still
        ! reported unconnected).
-       if (NUOPC_IsConnected(exportState, fieldName=trim(flds_scalar_name), rc=rc)) then
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       connected = NUOPC_IsConnected(exportState, fieldName=trim(flds_scalar_name), rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       if (connected) then
           call dshr_state_SetScalar(dble(nx_global),flds_scalar_index_nx, exportState, flds_scalar_name, flds_scalar_num, rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
           call dshr_state_SetScalar(dble(ny_global),flds_scalar_index_ny, exportState, flds_scalar_name, flds_scalar_num, rc)
@@ -378,10 +380,9 @@ contains
     ! local variables
     type(ESMF_State)        :: importState, exportState
     type(ESMF_Clock)        :: clock
-    type(ESMF_TimeInterval) :: timeStep
-    type(ESMF_Time)         :: currTime, nextTime
-    integer                 :: next_ymd      ! model date
-    integer                 :: next_tod      ! model sec into model date
+    type(ESMF_Time)         :: currTime
+    integer                 :: current_ymd   ! model date at the CURRENT time
+    integer                 :: current_tod   ! model sec into model date at the CURRENT time
     integer                 :: yr            ! year
     integer                 :: mon           ! month
     integer                 :: day           ! day in month
@@ -408,16 +409,16 @@ contains
     ! value consistent with its currTime stamp.
     call ESMF_ClockGet( clock, currTime=currTime, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call ESMF_TimeGet( currTime, yy=yr, mm=mon, dd=day, s=next_tod, rc=rc )
+    call ESMF_TimeGet( currTime, yy=yr, mm=mon, dd=day, s=current_tod, rc=rc )
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call shr_cal_ymd2date(yr, mon, day, next_ymd)
+    call shr_cal_ymd2date(yr, mon, day, current_ymd)
 
     ! write restart if alarm is ringing
     restart_write = dshr_check_restart_alarm(clock, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     ! run dnwm
-    call dnwm_comp_run(gcomp, exportState, next_ymd, next_tod, restart_write, rc=rc)
+    call dnwm_comp_run(gcomp, exportState, current_ymd, current_tod, restart_write, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     ! Stamp the export fields with the component clock's CURRENT time. On the direct
@@ -425,8 +426,8 @@ contains
     ! the connector copies the export field AND its timestamp to SCHISM's import; if
     ! the stamp does not match SCHISM's currTime, NUOPC aborts at run with
     ! "Import Fields not at current time" (NUOPC_ModelBase INCOMPATIBILITY). dnwm
-    ! interpolates its stream to next_time for the zero-order hold, but for the
-    ! coupler the value is valid AT currTime, so stamp with currTime.
+    ! interpolates its stream AT currTime (see above), so the exported value and
+    ! its timestamp agree by construction.
     call NUOPC_SetTimestamp(exportState, clock, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -450,6 +451,8 @@ contains
     ! local variables
     logical :: first_time = .true.
     integer :: n
+    integer :: n_spval        ! special/fill values clamped to 0 this advance
+    integer :: n_neg          ! negative discharge values clamped to 0 this advance
     character(len=CL) :: rpfile
     character(*), parameter :: subName = "(dnwm_comp_run) "
     !-------------------------------------------------------------------------------
@@ -487,6 +490,7 @@ contains
     ! time and spatially interpolate to model time and grid
     call ESMF_TraceRegionEnter('dnwm_strdata_advance')
     call shr_strdata_advance(sdat, target_ymd, target_tod, logunit, 'dnwm', rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call ESMF_TraceRegionExit('dnwm_strdata_advance')
 
     ! copy all fields from streams to export state as default
@@ -501,22 +505,34 @@ contains
     select case (trim(datamode))
     case('copyall')
        ! zero out "special values" and any negative discharge of the export field
-       ! (NWM streamflow is non-negative; clamp defensively)
+       ! (NWM streamflow is non-negative). Anything clamped is REPORTED: silently
+       ! altering data in a pass-through component would mask upstream sign or
+       ! reach-pairing bugs as mysteriously dry rivers.
+       n_spval = 0
+       n_neg   = 0
        do n = 1, size(river_volume_flux)
-          if (abs(river_volume_flux(n)) > 1.0e28) river_volume_flux(n) = 0.0_r8
-          if (river_volume_flux(n) < 0.0_r8)      river_volume_flux(n) = 0.0_r8
+          if (abs(river_volume_flux(n)) > 1.0e28_r8) then
+             river_volume_flux(n) = 0.0_r8
+             n_spval = n_spval + 1
+          else if (river_volume_flux(n) < 0.0_r8) then
+             river_volume_flux(n) = 0.0_r8
+             n_neg = n_neg + 1
+          end if
        enddo
+       if (n_spval > 0 .or. n_neg > 0) then
+          write(logunit,'(a,i8,a,i8,a)') trim(subname)//' WARNING: clamped ', n_spval, &
+               ' special/fill value(s) and ', n_neg, ' negative discharge value(s) to 0'
+       end if
     end select
 
-    ! write restarts if needed
+    ! write restarts if needed (datamode is validated to 'copyall' at advertise,
+    ! so no per-mode gate is required here)
     if (restart_write) then
-       if(trim(datamode) .eq. 'copyall') then
-          call shr_get_rpointer_name(gcomp, 'nwm', target_ymd, target_tod, rpfile, 'write', rc)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
-          call dshr_restart_write(rpfile, case_name, 'dnwm', inst_suffix, target_ymd, target_tod, &
-               logunit, my_task, sdat, rc)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       endif
+       call shr_get_rpointer_name(gcomp, 'nwm', target_ymd, target_tod, rpfile, 'write', rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call dshr_restart_write(rpfile, case_name, 'dnwm', inst_suffix, target_ymd, target_tod, &
+            logunit, my_task, sdat, rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end if
 
     ! write diagnostics
