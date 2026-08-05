@@ -25,6 +25,7 @@ module docn_datamode_copyall_mod
   real(r8), pointer :: So_dhdy(:)   => null()
   real(r8), pointer :: Fioo_q(:)    => null()
   real(r8), pointer :: So_h(:)      => null()
+  real(r8), pointer :: So_hmix(:)   => null()
 
   real(r8) , parameter :: tkfrz   = shr_const_tkfrz       ! freezing point, fresh water (kelvin)
   real(r8) , parameter :: ocnsalt = shr_const_ocn_ref_sal ! ocean reference salinity
@@ -62,6 +63,7 @@ contains
     call dshr_fldList_add(fldsExport, 'So_dhdy'             )
     call dshr_fldList_add(fldsExport, 'Fioo_q'              )
     call dshr_fldList_add(fldsExport, 'So_h'                )
+    call dshr_fldList_add(fldsExport, 'So_hmix'             )
 
     fldlist => fldsExport ! the head of the linked list
     do while (associated(fldlist))
@@ -106,6 +108,8 @@ contains
     if (chkerr(rc,__LINE__,u_FILE_u)) return
     call dshr_state_getfldptr(exportState, 'So_h'     , fldptr1=So_h     , allowNullReturn=.true. , rc=rc)
     if (chkerr(rc,__LINE__,u_FILE_u)) return
+    call dshr_state_getfldptr(exportState, 'So_hmix'  , fldptr1=So_hmix  , allowNullReturn=.true. , rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
 
     if (associated(So_u)) then
       So_u(:) = 0.0_r8
@@ -128,6 +132,9 @@ contains
     end if
     if (associated(So_h)) then
       So_h(:) = 0.0_r8
+    end if
+    if (associated(So_hmix)) then
+      So_hmix(:) = 0.0_r8
     end if
 
     ! Set export state ocean fraction (So_omask)
